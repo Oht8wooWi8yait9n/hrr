@@ -19,7 +19,7 @@ Generates:
 import sys
 import re
 from datetime import datetime, timezone
-from urllib.parse import urljoin, urlparse, urlunparse, quote
+from urllib.parse import urljoin, urlparse, urlunparse, quote, unquote
 import xml.etree.ElementTree as ET
 import requests
 
@@ -49,11 +49,12 @@ CORE_INDEX_PAGES = [
 
 
 def normalize_url(url: str) -> str:
-    """Normalize URL by stripping fragments and ensuring valid path quote."""
+    """Normalize URL by stripping fragments and ensuring clean single percent-encoding."""
     clean = url.split("#")[0].strip()
     parsed = urlparse(clean)
-    encoded_path = quote(parsed.path, safe="/:")
-    return urlunparse((parsed.scheme, parsed.netloc, encoded_path, parsed.params, parsed.query, ""))
+    # Unquote first to prevent double-encoding (%2520 -> %20)
+    clean_path = quote(unquote(parsed.path), safe="/:")
+    return urlunparse((parsed.scheme, parsed.netloc, clean_path, parsed.params, parsed.query, ""))
 
 
 def crawl_hrr():
