@@ -16,6 +16,7 @@ Generates:
   - hrr_urls.txt             (Plain text newline-delimited list of all URLs)
 """
 
+import os
 import sys
 import re
 from datetime import datetime, timezone
@@ -134,23 +135,49 @@ def crawl_hrr():
     )
 
 
+def load_existing_lastmod(sitemap_path: str) -> dict[str, str]:
+    mapping = {}
+    if os.path.exists(sitemap_path):
+        try:
+            tree = ET.parse(sitemap_path)
+            for u in tree.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}url"):
+                loc = u.find("{http://www.sitemaps.org/schemas/sitemap/0.9}loc")
+                lastmod = u.find("{http://www.sitemaps.org/schemas/sitemap/0.9}lastmod")
+                if loc is not None and loc.text and lastmod is not None and lastmod.text:
+                    mapping[loc.text.strip()] = lastmod.text.strip()
+        except Exception:
+            pass
+    return mapping
+
+
+def write_if_changed(file_path: str, content: bytes):
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "rb") as f:
+                if f.read() == content:
+                    return
+        except Exception:
+            pass
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+
 def build_sitemap_xml(urls: list[str], output_path: str):
-    """Build a sitemaps.org compliant XML sitemap."""
+    """Build a sitemaps.org compliant XML sitemap preserving existing lastmod."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    existing_lastmod = load_existing_lastmod(output_path)
     root = ET.Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
 
-    for url in urls:
+    for url in sorted(urls):
         url_elem = ET.SubElement(root, "url")
         loc_elem = ET.SubElement(url_elem, "loc")
         loc_elem.text = url
         lastmod_elem = ET.SubElement(url_elem, "lastmod")
-        lastmod_elem.text = today
+        lastmod_elem.text = existing_lastmod.get(url, today)
 
-    xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-    with open(output_path, "wb") as f:
-        f.write(xml_bytes)
-        f.write(b"\n")
-    print(f"[+] Written {len(urls)} URLs to {output_path}")
+    xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
+    write_if_changed(output_path, xml_bytes)
+    print(f"[+] Verified/written {len(urls)} URLs to {output_path}")
 
 
 def main():
@@ -168,10 +195,9 @@ def main():
     build_sitemap_xml(risks_and_evidence, "hrr_risks_sitemap.xml")
 
     # 4. Plain Text URL List
-    with open("hrr_urls.txt", "w", encoding="utf-8") as f:
-        for u in all_urls:
-            f.write(f"{u}\n")
-    print(f"[+] Written full URL list to hrr_urls.txt")
+    urls_bytes = ("\n".join(all_urls) + "\n").encode("utf-8")
+    write_if_changed("hrr_urls.txt", urls_bytes)
+    print(f"[+] Verified/written full URL list to hrr_urls.txt")
 
 
 if __name__ == "__main__":
