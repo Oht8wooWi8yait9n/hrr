@@ -39,7 +39,6 @@ CORE_INDEX_PAGES = [
     f"{BASE_URL}/Tasks/",
     f"{BASE_URL}/Explore/",
     f"{BASE_URL}/MDRPs/",
-    f"{BASE_URL}/Reports/",
     f"{BASE_URL}/architecture/",
     f"{BASE_URL}/acronyms/",
     f"{BASE_URL}/intro/",
@@ -78,9 +77,16 @@ def crawl_hrr():
     for page_url in CORE_INDEX_PAGES:
         print(f"[*] Crawling section: {page_url}...", flush=True)
         try:
-            r = session.get(page_url, timeout=15)
-            if r.status_code != 200:
-                print(f"    [!] HTTP {r.status_code} for {page_url}")
+            r = None
+            for attempt in range(1, 4):
+                try:
+                    r = session.get(page_url, timeout=20)
+                    if r.status_code == 200:
+                        break
+                except Exception:
+                    pass
+            if r is None or r.status_code != 200:
+                print(f"    [!] HTTP {r.status_code if r is not None else 'ERR'} for {page_url}")
                 continue
             discovered_pages.add(normalize_url(page_url))
 
